@@ -40,7 +40,8 @@ class S3ClientTest(TestCase):
         mocked_boto3.client.return_value = mocked_client
         s3_client = S3Client(s3ol_access_point="Random_access_point")
         s3_client.respond_back_with_data(data='SomeData',
-                                         headers={"ContentRange": "0-100", "SomeRandomHeader": '0123', "Content-Length": "101"},
+                                         headers={"ContentRange": "0-100", "SomeRandomHeader": '0123',
+                                                  "Content-Length": "101"},
                                          request_route="Route", request_token="q2334")
 
         mocked_client.write_get_object_response.assert_called_once_with(Body='SomeData', ContentLength=101,
@@ -52,8 +53,10 @@ class S3ClientTest(TestCase):
         mocked_client = MagicMock()
         mocked_boto3.client.return_value = mocked_client
         s3_client = S3Client(s3ol_access_point="Random_access_point")
-        s3_client.respond_back_with_data(data='SomeData', headers={"Content-Range": "0-1200", "SomeRandomHeader": '0123'},
-                                         request_route="Route", request_token="q2334", status_code=S3_STATUS_CODES.PARTIAL_CONTENT_206)
+        s3_client.respond_back_with_data(data='SomeData',
+                                         headers={"Content-Range": "0-1200", "SomeRandomHeader": '0123'},
+                                         request_route="Route", request_token="q2334",
+                                         status_code=S3_STATUS_CODES.PARTIAL_CONTENT_206)
 
         mocked_client.write_get_object_response.assert_called_once_with(Body='SomeData', ContentRange="0-1200",
                                                                         RequestRoute='Route', RequestToken="q2334",
@@ -64,7 +67,8 @@ class S3ClientTest(TestCase):
     def test_s3_client_download_file_from_presigned_url_200_ok(self, mocked_get):
         s3_client = S3Client(s3ol_access_point="Random_access_point")
         http_header = {'some-header': 'header-value'}
-        text, response_http_headers, status_code = s3_client.download_file_from_presigned_url(PRESIGNED_URL_TEST, http_header)
+        text, response_http_headers, status_code = s3_client.download_file_from_presigned_url(PRESIGNED_URL_TEST,
+                                                                                              http_header)
         assert text == 'Test'
         assert response_http_headers == {'Content-Length': '4'}
         assert status_code == S3_STATUS_CODES.OK_200
@@ -75,7 +79,8 @@ class S3ClientTest(TestCase):
     def test_s3_client_download_partial_file_from_presigned_url(self, mocked_get):
         s3_client = S3Client(s3ol_access_point="Random_access_point")
         http_header = {'some-header': 'header-value'}
-        text, response_http_headers, status_code = s3_client.download_file_from_presigned_url(PRESIGNED_URL_TEST, http_header)
+        text, response_http_headers, status_code = s3_client.download_file_from_presigned_url(PRESIGNED_URL_TEST,
+                                                                                              http_header)
         assert text == 'Test'
         assert response_http_headers == {'Content-Length': '100'}
         assert status_code == S3_STATUS_CODES.PARTIAL_CONTENT_206
@@ -90,10 +95,12 @@ class S3ClientTest(TestCase):
         assert mocked_get.call_count == 5
 
     @patch('clients.s3_client.requests.Session.get',
-           side_effect=lambda *args, **kwargs: MockResponse(b'A' * (11 * 1024 * 1024), 200, {'Content-Length': str(11 * 1024 * 1024)}))
+           side_effect=lambda *args, **kwargs: MockResponse(b'A' * (11 * 1024 * 1024), 200,
+                                                            {'Content-Length': str(11 * 1024 * 1024)}))
     def test_s3_client_download_file_from_presigned_url_file_size_limit_exceeded(self, mocked_get):
         s3_client = S3Client(s3ol_access_point="Random_access_point")
-        self.assertRaises(FileSizeLimitExceededException, s3_client.download_file_from_presigned_url, PRESIGNED_URL_TEST, {})
+        self.assertRaises(FileSizeLimitExceededException, s3_client.download_file_from_presigned_url,
+                          PRESIGNED_URL_TEST, {})
 
         mocked_get.assert_called_once()
 
@@ -139,3 +146,16 @@ class S3ClientTest(TestCase):
         self.assertRaises(S3DownloadException, s3_client.download_file_from_presigned_url, PRESIGNED_URL_TEST, {})
 
         assert mocked_get.call_count == 5
+
+    def test_s3_client_filter_request_headers(self):
+        s3_client = S3Client(s3ol_access_point="Random_access_point")
+        url = "https://dummy/myfile.txt?X-Amz-SignedHeaders=host%3Bx-amz-to-include"
+
+        filtered_headers = s3_client._filter_request_headers(
+            url,
+            {
+                "Host":"otherhost",         # will be excluded since Host is on the denylist
+                "X-Amz-To-Include":"foo",   # will be included since it is signed
+                "X-Amz-To-Exclude":"bar",   # will be excluded since it starts with X-Amz- and is not signed
+                "X-Irrelevant":"baz"})      # will be included by default
+        assert filtered_headers == {"X-Amz-To-Include":"foo", "X-Irrelevant":"baz"}

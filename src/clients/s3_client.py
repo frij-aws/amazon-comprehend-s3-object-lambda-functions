@@ -1,4 +1,5 @@
 """Client wrapper over aws services."""
+import json
 import re
 import time
 import urllib
@@ -65,7 +66,7 @@ class S3Client:
     }
     # Restricted http headers that can't be sent to s3 as part of downloading object using preseigned url
     # Adding these headers can causes a mismatch with Sigv4 signature
-    BLOCKED_REQUEST_HEADERS = ("Host")
+    BLOCKED_REQUEST_HEADERS = ("host")
 
     def __init__(self, s3ol_access_point: str, max_file_supported=DOCUMENT_MAX_SIZE):
         self.max_file_supported = max_file_supported
@@ -128,12 +129,13 @@ class S3Client:
         filtered_headers = {}
         parsed_url = urllib.parse.urlparse(presigned_url)
         parsed_query_params = urllib.parse.parse_qs(parsed_url.query)
-        signed_headers = set(parsed_query_params.get('X-Amz-SignedHeaders', []))
+        signed_headers_params = parsed_query_params.get('X-Amz-SignedHeaders', [])
+        signed_headers = {h.lower() for p in signed_headers_params for h in p.split(";")}
 
         for header in headers:
-            if header in self.BLOCKED_REQUEST_HEADERS:
+            if header.lower() in self.BLOCKED_REQUEST_HEADERS:
                 continue
-            if str(header).lower().startswith('x-amz-') and header not in signed_headers:
+            if str(header).lower().startswith('x-amz-') and header.lower() not in signed_headers:
                 continue
             filtered_headers[header] = headers[header]
         return filtered_headers
