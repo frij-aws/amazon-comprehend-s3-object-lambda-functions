@@ -1,5 +1,4 @@
 """Client wrapper over aws services."""
-import json
 import re
 import time
 import urllib
